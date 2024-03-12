@@ -98,6 +98,7 @@ func (b *Builder) Build() *Transport {
 	}
 	if b.httpServerPort != 0 {
 		res.http = NewAxHttp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.httpServerHost, b.httpServerPort), "/api", b.dataHandlerFunc)
+		b.logger.Debug().Str("api-path", "/api").Str("bind", res.http.bind).Msg("http server created")
 		if b.httpConnectionTimeout != 0 {
 			res.http.WithTimeout(b.httpConnectionTimeout)
 		}

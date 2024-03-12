@@ -36,6 +36,7 @@ func NewAxHttp(ctx context.Context, logger zerolog.Logger, bind string, apiPath 
 		handlerFunc:  handlerFunc,
 	}
 	res.binProcessor = NewAxBinProcessor(logger).WithCompressionSize(1024)
+	res.parentRouter.Post(res.apiPath, res.handler)
 	return res
 }
 
@@ -55,8 +56,8 @@ func (a *AxHttp) WithTimeout(timeout time.Duration) *AxHttp {
 }
 
 func (a *AxHttp) WithRouter(r chi.Router) *AxHttp {
-	r.Post(a.apiPath, a.handler)
 	a.parentRouter = r
+	r.Post(a.apiPath, a.handler)
 	return a
 }
 
@@ -100,10 +101,6 @@ func (a *AxHttp) Stop() {
 	a.cancelFn()
 }
 
-func (a *AxHttp) process([]byte) ([]byte, error) {
-	return nil, nil
-}
-
 func (a *AxHttp) handler(w http.ResponseWriter, r *http.Request) {
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -117,11 +114,6 @@ func (a *AxHttp) handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err = a.handlerFunc(data, nil)
-	if err != nil {
-		writeHttpErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	data, err = a.process(data)
 	if err != nil {
 		writeHttpErr(w, http.StatusInternalServerError, err)
 		return

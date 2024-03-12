@@ -1,0 +1,23 @@
+syntax="proto3";
+
+package com.axgrid.axtransport;
+
+option java_package = "com.axgrid.axtransport";
+option java_multiple_files = true;
+option csharp_namespace = "AxGrid.Internal.Proto.AxTransport";
+
+enum PCompression {
+  P_COMPRESSION_NONE = 0;
+  P_COMPRESSION_GZIP = 1;
+}
+
+enum PEncryption {
+  P_ENCRYPTION_NONE = 0;
+  P_ENCRYPTION_AES = 1;
+}
+
+message PPacket {
+  bytes payload = 1;
+  PCompression compression = 2;
+  PEncryption encryption = 3;
+}

@@ -1,25 +1,30 @@
 package axtransport
 
-import "context"
-
 type Transport struct {
-	b                         *Builder
-	tcpCtx, httpCtx           context.Context
-	tcpCancelFn, httpCancelFn context.CancelFunc
-	dataHandlerFunc           DataHandlerFunc
+	b    *Builder
+	tcp  *AxTcp
+	http *AxHttp
 }
 
-func (t *Transport) Start() {
+func (t *Transport) Start() error {
 	t.StartHTTP()
-	t.StartTCP()
+	return t.StartTCP()
 }
 
-func (t *Transport) StartTCP() {
-	t.tcpCtx, t.tcpCancelFn = context.WithCancel(t.b.ctx)
+func (t *Transport) StartTCP() error {
+	if t.tcp != nil {
+		err := t.tcp.Start()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *Transport) StartHTTP() {
-	t.httpCtx, t.httpCancelFn = context.WithCancel(t.b.ctx)
+	if t.http != nil {
+		t.http.Start()
+	}
 }
 
 func (t *Transport) Stop() {
@@ -28,17 +33,13 @@ func (t *Transport) Stop() {
 }
 
 func (t *Transport) StopHTTP() {
-	if t.httpCancelFn != nil {
-		t.httpCancelFn()
-		t.httpCancelFn = nil
+	if t.http != nil {
+		t.http.Stop()
 	}
 }
 
 func (t *Transport) StopTCP() {
-	if t.tcpCancelFn != nil {
-		t.tcpCancelFn()
-		t.tcpCancelFn = nil
+	if t.tcp != nil {
+		t.tcp.Stop()
 	}
 }
-
-

@@ -2,6 +2,7 @@ package axtransport
 
 import (
 	"context"
+	"fmt"
 	"github.com/rs/zerolog"
 	"time"
 )
@@ -21,11 +22,12 @@ type Builder struct {
 	httpEventTimeout      time.Duration
 	tcpServerHost         string
 	tcpServerPort         int
-
-	tcpConnectionTimeout time.Duration
-	dataHandlerFunc      DataHandlerFunc
-	ctx                  context.Context
-	logger               zerolog.Logger
+	tcpConnectionTimeout  time.Duration
+	dataHandlerFunc       DataHandlerFunc
+	ctx                   context.Context
+	aesSecret             []byte
+	compressionSize       int
+	logger                zerolog.Logger
 }
 
 func AxTransport() *Builder {
@@ -39,6 +41,7 @@ func AxTransport() *Builder {
 		tcpConnectionTimeout:  30 * time.Second,
 		logger:                zerolog.Nop(),
 		ctx:                   context.Background(),
+		compressionSize:       1024,
 	}
 }
 
@@ -79,7 +82,39 @@ func (b *Builder) WithContext(ctx context.Context) *Builder {
 	return b
 }
 
+func (b *Builder) WithAES(secretKey []byte) *Builder {
+	b.aesSecret = secretKey
+	return b
+}
+
 func (b *Builder) WithDataHandlerFunc(dataHandlerFunc DataHandlerFunc) *Builder {
 	b.dataHandlerFunc = dataHandlerFunc
 	return b
+}
+
+func (b *Builder) Build() *Transport {
+	res := &Transport{
+		b: b,
+	}
+	if b.httpServerPort != 0 {
+		res.http = NewAxHttp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.httpServerHost, b.httpServerPort), "/api", b.dataHandlerFunc)
+		if b.httpConnectionTimeout != 0 {
+			res.http.WithTimeout(b.httpConnectionTimeout)
+		}
+		if b.aesSecret != nil {
+			res.http.WithAES(b.aesSecret)
+		}
+		res.http.WithCompressionSize(b.compressionSize)
+	}
+	if b.tcpServerPort != 0 {
+		res.tcp = NewAxTcp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.tcpServerHost, b.tcpServerPort), b.dataHandlerFunc)
+		if b.tcpConnectionTimeout != 0 {
+			res.tcp.WithTimeout(b.tcpConnectionTimeout)
+		}
+		if b.aesSecret != nil {
+			res.tcp.WithAES(b.aesSecret)
+		}
+		res.tcp.WithCompressionSize(b.compressionSize)
+	}
+	return res
 }

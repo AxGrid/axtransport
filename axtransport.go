@@ -6,6 +6,7 @@ type Transport struct {
 	b                         *Builder
 	tcpCtx, httpCtx           context.Context
 	tcpCancelFn, httpCancelFn context.CancelFunc
+	dataHandlerFunc           DataHandlerFunc
 }
 
 func (t *Transport) Start() {
@@ -39,3 +40,5 @@ func (t *Transport) StopTCP() {
 		t.tcpCancelFn = nil
 	}
 }
+
+

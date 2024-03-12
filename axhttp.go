@@ -16,22 +16,24 @@ type AxHttp struct {
 	parentCtx    context.Context
 	ctx          context.Context
 	cancelFn     context.CancelFunc
-	httpTimeout  time.Duration
+	timeout      time.Duration
 	parentRouter chi.Router
 	apiPath      string
 	bind         string
 	srv          *http.Server
 	binProcessor *AxBinProcessor
+	handlerFunc  DataHandlerFunc
 }
 
-func NewAxHttp(ctx context.Context, logger zerolog.Logger, bind string, apiPath string) *AxHttp {
+func NewAxHttp(ctx context.Context, logger zerolog.Logger, bind string, apiPath string, handlerFunc DataHandlerFunc) *AxHttp {
 	res := &AxHttp{
 		logger:       logger,
 		parentCtx:    ctx,
-		httpTimeout:  25 * time.Second,
+		timeout:      25 * time.Second,
 		bind:         bind,
 		parentRouter: chi.NewRouter(),
 		apiPath:      apiPath,
+		handlerFunc:  handlerFunc,
 	}
 	res.binProcessor = NewAxBinProcessor(logger).WithCompressionSize(1024)
 	return res
@@ -48,7 +50,7 @@ func (a *AxHttp) WithCompressionSize(size int) *AxHttp {
 }
 
 func (a *AxHttp) WithTimeout(timeout time.Duration) *AxHttp {
-	a.httpTimeout = timeout
+	a.timeout = timeout
 	return a
 }
 
@@ -68,8 +70,8 @@ func (a *AxHttp) Start() {
 	a.srv = &http.Server{
 		Addr:         a.bind,
 		Handler:      a.parentRouter,
-		ReadTimeout:  a.httpTimeout,
-		WriteTimeout: a.httpTimeout,
+		ReadTimeout:  a.timeout,
+		WriteTimeout: a.timeout,
 	}
 	go func() {
 		if err := a.srv.ListenAndServe(); err != nil {
@@ -114,7 +116,11 @@ func (a *AxHttp) handler(w http.ResponseWriter, r *http.Request) {
 		writeHttpErr(w, http.StatusBadRequest, err)
 		return
 	}
-	//TODO: processData
+	data, err = a.handlerFunc(data, nil)
+	if err != nil {
+		writeHttpErr(w, http.StatusInternalServerError, err)
+		return
+	}
 	data, err = a.process(data)
 	if err != nil {
 		writeHttpErr(w, http.StatusInternalServerError, err)

@@ -21,9 +21,11 @@ type Builder struct {
 	httpEventTimeout      time.Duration
 	tcpServerHost         string
 	tcpServerPort         int
-	ctx                   context.Context
-	tcpConnectionTimeout  time.Duration
-	logger                zerolog.Logger
+
+	tcpConnectionTimeout time.Duration
+	dataHandlerFunc      DataHandlerFunc
+	ctx                  context.Context
+	logger               zerolog.Logger
 }
 
 func AxTransport() *Builder {
@@ -74,5 +76,10 @@ func (b *Builder) WithLogger(logger zerolog.Logger) *Builder {
 
 func (b *Builder) WithContext(ctx context.Context) *Builder {
 	b.ctx = ctx
+	return b
+}
+
+func (b *Builder) WithDataHandlerFunc(dataHandlerFunc DataHandlerFunc) *Builder {
+	b.dataHandlerFunc = dataHandlerFunc
 	return b
 }

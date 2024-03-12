@@ -5,6 +5,8 @@ go 1.20
 require (
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/golang/protobuf v1.5.4
+	github.com/google/uuid v1.6.0
+	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.32.0
 	google.golang.org/protobuf v1.33.0
 )

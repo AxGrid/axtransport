@@ -18,7 +18,7 @@ type AxTcp struct {
 	timeout      time.Duration
 	bind         string
 	listener     net.Listener
-	binProcessor *AxBinProcessor
+	binProcessor BinProcessor
 	handlerFunc  DataHandlerFunc
 }
 
@@ -67,14 +67,14 @@ func (a *AxTcpConnection) Write(data []byte) {
 	a.outChan <- data
 }
 
-func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, handlerFunc DataHandlerFunc) *AxTcp {
+func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
 	res := &AxTcp{
 		logger:      logger,
 		parentCtx:   ctx,
 		bind:        bind,
 		handlerFunc: handlerFunc,
 	}
-	res.binProcessor = NewAxBinProcessor(logger).WithCompressionSize(1024)
+	res.binProcessor = bin.WithCompressionSize(1024) //NewAxBinProcessor(logger).WithCompressionSize(1024)
 	return res
 }
 

@@ -17,6 +17,13 @@ import (
 zed (12.03.2024)
 */
 
+type BinProcessor interface {
+	WithAES(secretKey []byte) BinProcessor
+	WithCompressionSize(size int) BinProcessor
+	Unmarshal(in []byte) ([]byte, error)
+	Marshal(in []byte) ([]byte, error)
+}
+
 var ErrNoAES = errors.New("no aes")
 
 type AxBinProcessor struct {
@@ -31,12 +38,12 @@ func NewAxBinProcessor(logger zerolog.Logger) *AxBinProcessor {
 	}
 }
 
-func (b *AxBinProcessor) WithAES(secretKey []byte) *AxBinProcessor {
+func (b *AxBinProcessor) WithAES(secretKey []byte) BinProcessor {
 	b.aes = internal.NewAES(secretKey)
 	return b
 }
 
-func (b *AxBinProcessor) WithCompressionSize(size int) *AxBinProcessor {
+func (b *AxBinProcessor) WithCompressionSize(size int) BinProcessor {
 	b.compressionSize = size
 	return b
 }

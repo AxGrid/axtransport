@@ -21,11 +21,11 @@ type AxHttp struct {
 	apiPath      string
 	bind         string
 	srv          *http.Server
-	binProcessor *AxBinProcessor
+	binProcessor BinProcessor
 	handlerFunc  DataHandlerFunc
 }
 
-func NewAxHttp(ctx context.Context, logger zerolog.Logger, bind string, apiPath string, handlerFunc DataHandlerFunc) *AxHttp {
+func NewAxHttp(ctx context.Context, logger zerolog.Logger, bind string, apiPath string, bin BinProcessor, handlerFunc DataHandlerFunc) *AxHttp {
 	res := &AxHttp{
 		logger:       logger,
 		parentCtx:    ctx,
@@ -35,7 +35,7 @@ func NewAxHttp(ctx context.Context, logger zerolog.Logger, bind string, apiPath 
 		apiPath:      apiPath,
 		handlerFunc:  handlerFunc,
 	}
-	res.binProcessor = NewAxBinProcessor(logger).WithCompressionSize(1024)
+	res.binProcessor = bin.WithCompressionSize(1024) //NewAxBinProcessor(logger).WithCompressionSize(1024)
 	res.parentRouter.Post(res.apiPath, res.handler)
 	return res
 }

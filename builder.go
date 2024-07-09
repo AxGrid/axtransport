@@ -24,6 +24,7 @@ type Builder struct {
 	tcpServerPort         int
 	tcpConnectionTimeout  time.Duration
 	dataHandlerFunc       DataHandlerFunc
+	binProcessor          BinProcessor
 	ctx                   context.Context
 	aesSecret             []byte
 	compressionSize       int
@@ -92,12 +93,20 @@ func (b *Builder) WithDataHandlerFunc(dataHandlerFunc DataHandlerFunc) *Builder 
 	return b
 }
 
+func (b *Builder) WithCustomBinProcessor(processor BinProcessor) *Builder {
+	b.binProcessor = processor
+	return b
+}
+
 func (b *Builder) Build() *Transport {
 	res := &Transport{
 		b: b,
 	}
+	if b.binProcessor == nil {
+		b.binProcessor = NewAxBinProcessor(b.logger)
+	}
 	if b.httpServerPort != 0 {
-		res.http = NewAxHttp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.httpServerHost, b.httpServerPort), "/api", b.dataHandlerFunc)
+		res.http = NewAxHttp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.httpServerHost, b.httpServerPort), "/api", b.binProcessor, b.dataHandlerFunc)
 		b.logger.Debug().Str("api-path", "/api").Str("bind", res.http.bind).Msg("http server created")
 		if b.httpConnectionTimeout != 0 {
 			res.http.WithTimeout(b.httpConnectionTimeout)
@@ -108,7 +117,7 @@ func (b *Builder) Build() *Transport {
 		res.http.WithCompressionSize(b.compressionSize)
 	}
 	if b.tcpServerPort != 0 {
-		res.tcp = NewAxTcp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.tcpServerHost, b.tcpServerPort), b.dataHandlerFunc)
+		res.tcp = NewAxTcp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.tcpServerHost, b.tcpServerPort), b.binProcessor, b.dataHandlerFunc)
 		if b.tcpConnectionTimeout != 0 {
 			res.tcp.WithTimeout(b.tcpConnectionTimeout)
 		}

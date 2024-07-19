@@ -35,6 +35,7 @@ func NewAxTcpConnection(ctx context.Context, conn net.Conn) *AxTcpConnection {
 		outChan: make(chan []byte, 100),
 	}
 	res.ctx, res.cancelFn = context.WithCancel(ctx)
+	res.ctx = context.WithValue(res.ctx, "connection", res)
 	go func() {
 		defer conn.Close()
 		for {

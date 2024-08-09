@@ -23,14 +23,16 @@ type AxTcp struct {
 }
 
 type AxTcpConnection struct {
+	logger   zerolog.Logger
 	conn     net.Conn
 	outChan  chan []byte
 	ctx      context.Context
 	cancelFn context.CancelFunc
 }
 
-func NewAxTcpConnection(ctx context.Context, conn net.Conn) *AxTcpConnection {
+func NewAxTcpConnection(ctx context.Context, logger zerolog.Logger, conn net.Conn) *AxTcpConnection {
 	res := &AxTcpConnection{
+		logger:  logger,
 		conn:    conn,
 		outChan: make(chan []byte, 100),
 	}
@@ -49,6 +51,7 @@ func NewAxTcpConnection(ctx context.Context, conn net.Conn) *AxTcpConnection {
 				}
 				_, err := conn.Write(addSize32(data))
 				if err != nil {
+					res.logger.Error().Err(err).Msg("can't write to connection")
 					return
 				}
 			}
@@ -61,11 +64,13 @@ func (a *AxTcpConnection) Close() {
 	a.cancelFn()
 }
 
-func (a *AxTcpConnection) Write(data []byte) {
+func (a *AxTcpConnection) Write(data []byte) error {
 	if a.ctx.Err() != nil {
-		return
+		a.logger.Error().Err(a.ctx.Err()).Msg("can't write to connection out chan")
+		return a.ctx.Err()
 	}
 	a.outChan <- data
+	return nil
 }
 
 func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
@@ -132,7 +137,7 @@ func (a *AxTcp) listen() {
 func (a *AxTcp) handleConn(conn net.Conn) {
 	log := a.logger.With().Str("remote", conn.RemoteAddr().String()).Logger()
 	defer conn.Close()
-	axConn := NewAxTcpConnection(a.ctx, conn)
+	axConn := NewAxTcpConnection(a.ctx, a.logger, conn)
 	timeout := time.Duration(a.timeout) * time.Millisecond
 	defer axConn.Close()
 	for {

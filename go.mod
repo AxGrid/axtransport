@@ -4,7 +4,6 @@ go 1.20
 
 require (
 	github.com/go-chi/chi/v5 v5.0.12
-	github.com/golang/protobuf v1.5.4
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.32.0
 	github.com/stretchr/testify v1.9.0

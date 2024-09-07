@@ -73,6 +73,10 @@ func (a *AxTcpConnection) Write(data []byte) error {
 	return nil
 }
 
+func (a *AxTcpConnection) Read(b []byte) (n int, err error) {
+	return a.conn.Read(b)
+}
+
 func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
 	res := &AxTcp{
 		logger:      logger,

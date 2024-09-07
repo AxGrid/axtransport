@@ -77,6 +77,10 @@ func (a *AxTcpConnection) Read(b []byte) (n int, err error) {
 	return a.conn.Read(b)
 }
 
+func (a *AxTcpConnection) SetReadDeadline(t time.Time) error {
+	return a.conn.SetReadDeadline(t)
+}
+
 func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
 	res := &AxTcp{
 		logger:      logger,

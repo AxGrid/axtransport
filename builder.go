@@ -3,6 +3,7 @@ package axtransport
 import (
 	"context"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 	"time"
 )
@@ -18,6 +19,7 @@ zed (12.03.2024)
 type Builder struct {
 	httpServerHost        string
 	httpServerPort        int
+	httpApiPath           string
 	httpConnectionTimeout time.Duration
 	httpEventTimeout      time.Duration
 	tcpServerHost         string
@@ -29,12 +31,14 @@ type Builder struct {
 	aesSecret             []byte
 	compressionSize       int
 	logger                zerolog.Logger
+	chiRouter             chi.Router
 }
 
 func AxTransport() *Builder {
 	return &Builder{
 		httpServerHost:        "0.0.0.0",
 		httpServerPort:        0,
+		httpApiPath:           "/api",
 		httpConnectionTimeout: 5 * time.Second,
 		httpEventTimeout:      50 * time.Second,
 		tcpServerHost:         "0.0.0.0",
@@ -68,8 +72,23 @@ func (b *Builder) WithTCPConnectionTimeout(timeout time.Duration) *Builder {
 	return b
 }
 
+func (b *Builder) WithHTTPApiPath(path string) *Builder {
+	b.httpApiPath = path
+	return b
+}
+
 func (b *Builder) WithHTTPEventTimeout(timeout time.Duration) *Builder {
 	b.httpEventTimeout = timeout
+	return b
+}
+
+func (b *Builder) WithCompressionSize(size int) *Builder {
+	b.compressionSize = size
+	return b
+}
+
+func (b *Builder) WithHTTPRouter(r chi.Router) *Builder {
+	b.chiRouter = r
 	return b
 }
 
@@ -107,7 +126,10 @@ func (b *Builder) Build() *Transport {
 	}
 	if b.httpServerPort != 0 {
 		res.http = NewAxHttp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.httpServerHost, b.httpServerPort), "/api", b.binProcessor, b.dataHandlerFunc)
-		b.logger.Debug().Str("api-path", "/api").Str("bind", res.http.bind).Msg("http server created")
+		if b.chiRouter != nil {
+			res.http.WithRouter(b.chiRouter)
+		}
+		b.logger.Debug().Str("api-path", b.httpApiPath).Str("bind", res.http.bind).Msg("http server created")
 		if b.httpConnectionTimeout != 0 {
 			res.http.WithTimeout(b.httpConnectionTimeout)
 		}

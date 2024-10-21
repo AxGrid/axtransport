@@ -187,12 +187,14 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 			rData, err = a.handlerFunc(rData, axConn.ctx)
 			if err != nil {
 				log.Error().Err(err).Msg("handle request failed")
+				axConn.Write([]byte(err.Error()))
 				axConn.Close()
 				return
 			}
 			rData, err = a.binProcessor.Marshal(rData)
 			if err != nil {
 				log.Error().Err(err).Msg("marshal failed")
+				axConn.Write([]byte(err.Error()))
 				axConn.Close()
 				return
 			}

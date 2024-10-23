@@ -156,31 +156,37 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 		err := conn.SetReadDeadline(time.Now().Add(timeout))
 		if err != nil {
 			log.Error().Err(err).Msg("set read deadline failed")
+			axConn.Write([]byte(err.Error()))
 			return
 		}
 		sizeBytes, err := readNBytes(conn, 4)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to read header bytes")
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		bodyLength := getUInt32FromBytes(sizeBytes)
 		if bodyLength == 0 {
 			log.Error().Msg("failed to convert header to len")
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		err = conn.SetReadDeadline(time.Now().Add(timeout))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to set body read deadline")
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		dataBytes, err := readNBytes(conn, int(bodyLength))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to read body bytes")
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		data, err := a.binProcessor.Unmarshal(dataBytes)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal failed")
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		go func(rData []byte) {

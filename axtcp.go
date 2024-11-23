@@ -17,6 +17,7 @@ type AxTcp struct {
 	cancelFn     context.CancelFunc
 	timeout      time.Duration
 	bind         string
+	writeBufSize int
 	listener     net.Listener
 	binProcessor BinProcessor
 	handlerFunc  DataHandlerFunc
@@ -30,11 +31,11 @@ type AxTcpConnection struct {
 	cancelFn context.CancelFunc
 }
 
-func NewAxTcpConnection(ctx context.Context, logger zerolog.Logger, conn net.Conn) *AxTcpConnection {
+func NewAxTcpConnection(ctx context.Context, logger zerolog.Logger, conn net.Conn, outSize int) *AxTcpConnection {
 	res := &AxTcpConnection{
 		logger:  logger,
 		conn:    conn,
-		outChan: make(chan []byte, 100),
+		outChan: make(chan []byte, outSize),
 	}
 	res.ctx, res.cancelFn = context.WithCancel(ctx)
 	res.ctx = context.WithValue(res.ctx, "connection", res)
@@ -111,6 +112,11 @@ func (a *AxTcp) WithTimeout(timeout time.Duration) *AxTcp {
 	return a
 }
 
+func (a *AxTcp) WithWriteBUfSize(size int) *AxTcp {
+	a.writeBufSize = size
+	return a
+}
+
 func (a *AxTcp) Start() error {
 	var err error
 	a.ctx, a.cancelFn = context.WithCancel(a.parentCtx)
@@ -149,7 +155,7 @@ func (a *AxTcp) listen() {
 func (a *AxTcp) handleConn(conn net.Conn) {
 	log := a.logger.With().Str("remote", conn.RemoteAddr().String()).Logger()
 	defer conn.Close()
-	axConn := NewAxTcpConnection(a.ctx, a.logger, conn)
+	axConn := NewAxTcpConnection(a.ctx, a.logger, conn, a.writeBufSize)
 	timeout := time.Duration(a.timeout) * time.Millisecond
 	defer axConn.Close()
 	for {

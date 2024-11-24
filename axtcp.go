@@ -3,6 +3,7 @@ package axtransport
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/rs/zerolog"
 	"io"
@@ -26,6 +27,7 @@ type AxTcp struct {
 type AxTcpConnection struct {
 	logger   zerolog.Logger
 	conn     net.Conn
+	outSize  int
 	outChan  chan []byte
 	ctx      context.Context
 	cancelFn context.CancelFunc
@@ -35,6 +37,7 @@ func NewAxTcpConnection(ctx context.Context, logger zerolog.Logger, conn net.Con
 	res := &AxTcpConnection{
 		logger:  logger,
 		conn:    conn,
+		outSize: outSize,
 		outChan: make(chan []byte, outSize),
 	}
 	res.ctx, res.cancelFn = context.WithCancel(ctx)
@@ -65,7 +68,15 @@ func (a *AxTcpConnection) Close() {
 	a.cancelFn()
 }
 
+var (
+	ErrTooMuchData = errors.New("too much data in out chan")
+)
+
 func (a *AxTcpConnection) Write(data []byte) error {
+	if len(a.outChan) > a.outSize/2 {
+		a.logger.Error().Err(a.ctx.Err()).Msg("too much data in out chan")
+		return ErrTooMuchData
+	}
 	if a.ctx.Err() != nil {
 		a.logger.Error().Err(a.ctx.Err()).Msg("can't write to connection out chan")
 		return a.ctx.Err()
@@ -86,12 +97,13 @@ func (a *AxTcpConnection) SetWriteDeadline(t time.Time) error {
 	return a.conn.SetWriteDeadline(t)
 }
 
-func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
+func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, writeBufSize int, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
 	res := &AxTcp{
-		logger:      logger,
-		parentCtx:   ctx,
-		bind:        bind,
-		handlerFunc: handlerFunc,
+		logger:       logger,
+		parentCtx:    ctx,
+		bind:         bind,
+		writeBufSize: writeBufSize,
+		handlerFunc:  handlerFunc,
 	}
 	res.binProcessor = bin.WithCompressionSize(1024) //NewAxBinProcessor(logger).WithCompressionSize(1024)
 	return res

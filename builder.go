@@ -22,6 +22,7 @@ type Builder struct {
 	httpEventTimeout      time.Duration
 	tcpServerHost         string
 	tcpServerPort         int
+	tcpWriteBufSize       int
 	tcpConnectionTimeout  time.Duration
 	dataHandlerFunc       DataHandlerFunc
 	binProcessor          BinProcessor
@@ -39,6 +40,7 @@ func AxTransport() *Builder {
 		httpEventTimeout:      50 * time.Second,
 		tcpServerHost:         "0.0.0.0",
 		tcpServerPort:         0,
+		tcpWriteBufSize:       200,
 		tcpConnectionTimeout:  30 * time.Second,
 		logger:                zerolog.Nop(),
 		ctx:                   context.Background(),
@@ -65,6 +67,11 @@ func (b *Builder) WithHTTPConnectionTimeout(timeout time.Duration) *Builder {
 
 func (b *Builder) WithTCPConnectionTimeout(timeout time.Duration) *Builder {
 	b.tcpConnectionTimeout = timeout
+	return b
+}
+
+func (b *Builder) WithCPWriteBufSize(size int) *Builder {
+	b.tcpWriteBufSize = size
 	return b
 }
 
@@ -117,7 +124,7 @@ func (b *Builder) Build() *Transport {
 		res.http.WithCompressionSize(b.compressionSize)
 	}
 	if b.tcpServerPort != 0 {
-		res.tcp = NewAxTcp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.tcpServerHost, b.tcpServerPort), b.binProcessor, b.dataHandlerFunc)
+		res.tcp = NewAxTcp(b.ctx, b.logger, fmt.Sprintf("%s:%d", b.tcpServerHost, b.tcpServerPort), b.tcpWriteBufSize, b.binProcessor, b.dataHandlerFunc)
 		if b.tcpConnectionTimeout != 0 {
 			res.tcp.WithTimeout(b.tcpConnectionTimeout)
 		}

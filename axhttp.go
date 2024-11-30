@@ -80,7 +80,7 @@ func (a *AxHttp) WithRouter(r chi.Router) *AxHttp {
 func (a *AxHttp) Start() {
 	a.logger.Info().Msgf("Starting HTTP server on %s", a.bind)
 	if a.ctx != nil && a.ctx.Err() == nil {
-		a.logger.Warn().Msg("HTTP server already started")
+		a.logger.Warn().Msg("HTTP server already starte")
 		return
 	}
 	a.ctx, a.cancelFn = context.WithCancel(a.parentCtx)

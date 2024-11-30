@@ -3,6 +3,7 @@ package axtransport
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -42,6 +43,7 @@ type AxTcp struct {
 	cancelFn     context.CancelFunc
 	timeout      time.Duration
 	bind         string
+	writeBufSize int
 	listener     net.Listener
 	binProcessor BinProcessor
 	handlerFunc  DataHandlerFunc
@@ -50,16 +52,18 @@ type AxTcp struct {
 type AxTcpConnection struct {
 	logger   zerolog.Logger
 	conn     net.Conn
+	outSize  int
 	outChan  chan []byte
 	ctx      context.Context
 	cancelFn context.CancelFunc
 }
 
-func NewAxTcpConnection(ctx context.Context, logger zerolog.Logger, conn net.Conn) *AxTcpConnection {
+func NewAxTcpConnection(ctx context.Context, logger zerolog.Logger, conn net.Conn, outSize int) *AxTcpConnection {
 	res := &AxTcpConnection{
 		logger:  logger,
 		conn:    conn,
-		outChan: make(chan []byte, 100),
+		outSize: outSize,
+		outChan: make(chan []byte, outSize),
 	}
 	res.ctx, res.cancelFn = context.WithCancel(ctx)
 	res.ctx = context.WithValue(res.ctx, "connection", res)
@@ -90,7 +94,15 @@ func (a *AxTcpConnection) Close() {
 	a.cancelFn()
 }
 
+var (
+	ErrTooMuchData = errors.New("too much data in out chan")
+)
+
 func (a *AxTcpConnection) Write(data []byte) error {
+	if len(a.outChan) > a.outSize/2 {
+		a.logger.Error().Err(a.ctx.Err()).Msg("too much data in out chan")
+		return ErrTooMuchData
+	}
 	if a.ctx.Err() != nil {
 		a.logger.Error().Err(a.ctx.Err()).Msg("can't write to connection out chan")
 		opsTcpErrorCount.Inc()
@@ -112,12 +124,13 @@ func (a *AxTcpConnection) SetWriteDeadline(t time.Time) error {
 	return a.conn.SetWriteDeadline(t)
 }
 
-func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
+func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, writeBufSize int, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
 	res := &AxTcp{
-		logger:      logger,
-		parentCtx:   ctx,
-		bind:        bind,
-		handlerFunc: handlerFunc,
+		logger:       logger,
+		parentCtx:    ctx,
+		bind:         bind,
+		writeBufSize: writeBufSize,
+		handlerFunc:  handlerFunc,
 	}
 	res.binProcessor = bin.WithCompressionSize(1024) //NewAxBinProcessor(logger).WithCompressionSize(1024)
 	return res
@@ -135,6 +148,11 @@ func (a *AxTcp) WithCompressionSize(size int) *AxTcp {
 
 func (a *AxTcp) WithTimeout(timeout time.Duration) *AxTcp {
 	a.timeout = timeout
+	return a
+}
+
+func (a *AxTcp) WithWriteBUfSize(size int) *AxTcp {
+	a.writeBufSize = size
 	return a
 }
 
@@ -178,7 +196,7 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 	opsConnectionsCount.Inc()
 	defer opsConnectionsCount.Dec()
 	defer conn.Close()
-	axConn := NewAxTcpConnection(a.ctx, a.logger, conn)
+	axConn := NewAxTcpConnection(a.ctx, a.logger, conn, a.writeBufSize)
 	timeout := time.Duration(a.timeout) * time.Millisecond
 	defer axConn.Close()
 	for {
@@ -186,18 +204,21 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 		if err != nil {
 			log.Error().Err(err).Msg("set read deadline failed")
 			opsTcpErrorCount.Inc()
+			axConn.Write([]byte(err.Error()))
 			return
 		}
 		sizeBytes, err := readNBytes(conn, 4)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to read header bytes")
 			opsTcpErrorCount.Inc()
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		bodyLength := getUInt32FromBytes(sizeBytes)
 		if bodyLength == 0 {
 			log.Error().Msg("failed to convert header to len")
 			opsTcpErrorCount.Inc()
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		if bodyLength > MaxBodySize {
@@ -210,18 +231,21 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 		if err != nil {
 			log.Error().Err(err).Msg("failed to set body read deadline")
 			opsTcpErrorCount.Inc()
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		dataBytes, err := readNBytes(conn, int(bodyLength))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to read body bytes")
 			opsTcpErrorCount.Inc()
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		data, err := a.binProcessor.Unmarshal(dataBytes)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal failed")
 			opsTcpErrorCount.Inc()
+			axConn.Write([]byte(err.Error()))
 			break
 		}
 		go func(rData []byte) {
@@ -230,12 +254,14 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 			opsRequestDuration.WithLabelValues("tcp").Observe(time.Since(startTime).Seconds())
 			if err != nil {
 				log.Error().Err(err).Msg("handle request failed")
+				axConn.Write([]byte(err.Error()))
 				axConn.Close()
 				return
 			}
 			rData, err = a.binProcessor.Marshal(rData)
 			if err != nil {
 				log.Error().Err(err).Msg("marshal failed")
+				axConn.Write([]byte(err.Error()))
 				axConn.Close()
 				return
 			}

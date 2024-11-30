@@ -4,10 +4,35 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	"io"
 	"net"
 	"time"
+)
+
+var MaxBodySize = uint32(1024 * 1024)
+
+var (
+	opsRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ax_transport",
+		Name:      "request_duration",
+		Help:      "Request duration",
+		Buckets:   prometheus.ExponentialBuckets(0.1, 1.5, 10),
+	}, []string{"type"})
+
+	opsConnectionsCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "ax_transport",
+		Name:      "tcp_connections",
+		Help:      "TCP connections",
+	})
+
+	opsTcpErrorCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "ax_transport",
+		Name:      "tcp_error_count",
+		Help:      "TCP error count",
+	})
 )
 
 type AxTcp struct {
@@ -52,6 +77,7 @@ func NewAxTcpConnection(ctx context.Context, logger zerolog.Logger, conn net.Con
 				_, err := conn.Write(addSize32(data))
 				if err != nil {
 					res.logger.Error().Err(err).Msg("can't write to connection")
+					opsTcpErrorCount.Inc()
 					return
 				}
 			}
@@ -67,6 +93,7 @@ func (a *AxTcpConnection) Close() {
 func (a *AxTcpConnection) Write(data []byte) error {
 	if a.ctx.Err() != nil {
 		a.logger.Error().Err(a.ctx.Err()).Msg("can't write to connection out chan")
+		opsTcpErrorCount.Inc()
 		return a.ctx.Err()
 	}
 	a.outChan <- data
@@ -148,6 +175,8 @@ func (a *AxTcp) listen() {
 
 func (a *AxTcp) handleConn(conn net.Conn) {
 	log := a.logger.With().Str("remote", conn.RemoteAddr().String()).Logger()
+	opsConnectionsCount.Inc()
+	defer opsConnectionsCount.Dec()
 	defer conn.Close()
 	axConn := NewAxTcpConnection(a.ctx, a.logger, conn)
 	timeout := time.Duration(a.timeout) * time.Millisecond
@@ -156,35 +185,49 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 		err := conn.SetReadDeadline(time.Now().Add(timeout))
 		if err != nil {
 			log.Error().Err(err).Msg("set read deadline failed")
+			opsTcpErrorCount.Inc()
 			return
 		}
 		sizeBytes, err := readNBytes(conn, 4)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to read header bytes")
+			opsTcpErrorCount.Inc()
 			break
 		}
 		bodyLength := getUInt32FromBytes(sizeBytes)
 		if bodyLength == 0 {
 			log.Error().Msg("failed to convert header to len")
+			opsTcpErrorCount.Inc()
 			break
 		}
+		if bodyLength > MaxBodySize {
+			log.Error().Uint32("body-length", bodyLength).Msg("body too big")
+			opsTcpErrorCount.Inc()
+			break
+		}
+
 		err = conn.SetReadDeadline(time.Now().Add(timeout))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to set body read deadline")
+			opsTcpErrorCount.Inc()
 			break
 		}
 		dataBytes, err := readNBytes(conn, int(bodyLength))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to read body bytes")
+			opsTcpErrorCount.Inc()
 			break
 		}
 		data, err := a.binProcessor.Unmarshal(dataBytes)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal failed")
+			opsTcpErrorCount.Inc()
 			break
 		}
 		go func(rData []byte) {
+			startTime := time.Now()
 			rData, err = a.handlerFunc(rData, axConn.ctx)
+			opsRequestDuration.WithLabelValues("tcp").Observe(time.Since(startTime).Seconds())
 			if err != nil {
 				log.Error().Err(err).Msg("handle request failed")
 				axConn.Close()

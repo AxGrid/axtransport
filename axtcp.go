@@ -97,6 +97,10 @@ func (a *AxTcpConnection) SetWriteDeadline(t time.Time) error {
 	return a.conn.SetWriteDeadline(t)
 }
 
+func (a *AxTcpConnection) RemoteAddr() net.Addr {
+	return a.conn.RemoteAddr()
+}
+
 func NewAxTcp(ctx context.Context, logger zerolog.Logger, bind string, writeBufSize int, bin BinProcessor, handlerFunc DataHandlerFunc) *AxTcp {
 	res := &AxTcp{
 		logger:       logger,

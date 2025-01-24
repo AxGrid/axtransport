@@ -1,5 +1,7 @@
 package axtransport
 
+import "github.com/go-chi/chi/v5"
+
 type Transport struct {
 	b    *Builder
 	tcp  *AxTcp
@@ -42,4 +44,8 @@ func (t *Transport) StopTCP() {
 	if t.tcp != nil {
 		t.tcp.Stop()
 	}
+}
+
+func (t *Transport) Router() chi.Router {
+	return t.http.parentRouter
 }

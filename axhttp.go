@@ -5,10 +5,26 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	"io"
 	"net/http"
 	"time"
+)
+
+var (
+	opsRequestCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "ax_transport",
+		Name:      "http_request_count",
+		Help:      "HTTP request count",
+	})
+
+	opsHttpErrorCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "ax_transport",
+		Name:      "http_error_count",
+		Help:      "HTTP error count",
+	})
 )
 
 type AxHttp struct {
@@ -102,24 +118,31 @@ func (a *AxHttp) Stop() {
 }
 
 func (a *AxHttp) handler(w http.ResponseWriter, r *http.Request) {
+	opsRequestCount.Inc()
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
+		opsHttpErrorCount.Inc()
 		writeHttpErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	defer r.Body.Close()
 	data, err = a.binProcessor.Unmarshal(data)
 	if err != nil {
+		opsHttpErrorCount.Inc()
 		writeHttpErr(w, http.StatusBadRequest, err)
 		return
 	}
+	startTime := time.Now()
 	data, err = a.handlerFunc(data, nil)
+	opsRequestDuration.WithLabelValues("http").Observe(time.Since(startTime).Seconds())
 	if err != nil {
+		opsHttpErrorCount.Inc()
 		writeHttpErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	data, err = a.binProcessor.Marshal(data)
 	if err != nil {
+		opsHttpErrorCount.Inc()
 		writeHttpErr(w, http.StatusInternalServerError, err)
 		return
 	}

@@ -95,7 +95,7 @@ func (a *AxTcpConnection) Close() {
 }
 
 var (
-	ErrTooMuchData = errors.New("too much data in out chan")
+	ErrTooMuchData = errors.New("too many data in out chan")
 )
 
 func (a *AxTcpConnection) Write(data []byte) error {

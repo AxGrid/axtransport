@@ -222,7 +222,7 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 		if bodyLength == 0 {
 			log.Error().Msg("failed to convert header to len")
 			opsTcpErrorCount.Inc()
-			axConn.Write([]byte(err.Error()))
+			axConn.Write([]byte("receive empty body"))
 			break
 		}
 		if bodyLength > MaxBodySize {

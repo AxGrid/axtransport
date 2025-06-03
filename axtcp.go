@@ -78,6 +78,9 @@ func NewAxTcpConnection(ctx context.Context, logger zerolog.Logger, conn net.Con
 				if !ok {
 					return
 				}
+				if err := conn.SetWriteDeadline(time.Now().Add(time.Second * 5)); err != nil {
+					res.logger.Error().Err(err).Msg("can't set write deadline to connection")
+				}
 				_, err := conn.Write(addSize32(data))
 				if err != nil {
 					res.logger.Error().Err(err).Msg("can't write to connection")

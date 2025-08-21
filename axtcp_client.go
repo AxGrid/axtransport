@@ -14,7 +14,7 @@ type AxTcpClient struct {
 	address      string
 	ctx          context.Context
 	cancel       context.CancelFunc
-	binProcessor *AxBinProcessor
+	binProcessor BinProcessor
 	logger       zerolog.Logger
 	timeout      time.Duration
 	handlerFunc  DataReceiveFunc
@@ -34,7 +34,7 @@ func NewAxTcpClient(address string, secret []byte, ctx context.Context, logger z
 	return res, nil
 }
 
-func (a *AxTcpClient) SetBinProcessor(processor *AxBinProcessor) {
+func (a *AxTcpClient) SetBinProcessor(processor BinProcessor) {
 	if processor == nil {
 		a.binProcessor = NewAxBinProcessor(a.logger)
 	} else {

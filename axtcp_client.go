@@ -34,6 +34,14 @@ func NewAxTcpClient(address string, secret []byte, ctx context.Context, logger z
 	return res, nil
 }
 
+func (a *AxTcpClient) SetBinProcessor(processor *AxBinProcessor) {
+	if processor == nil {
+		a.binProcessor = NewAxBinProcessor(a.logger)
+	} else {
+		a.binProcessor = processor
+	}
+}
+
 func (a *AxTcpClient) SetTimeout(timeout time.Duration) {
 	a.timeout = timeout
 }

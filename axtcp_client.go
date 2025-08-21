@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
 
@@ -16,7 +17,7 @@ type AxTcpClient struct {
 	binProcessor *AxBinProcessor
 	logger       zerolog.Logger
 	timeout      time.Duration
-	handlerFunc  DataHandlerFunc
+	handlerFunc  DataReceiveFunc
 }
 
 func NewAxTcpClient(address string, secret []byte, ctx context.Context, logger zerolog.Logger) (*AxTcpClient, error) {
@@ -30,15 +31,19 @@ func NewAxTcpClient(address string, secret []byte, ctx context.Context, logger z
 	if secret != nil {
 		res.binProcessor.WithAES(secret)
 	}
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		return nil, err
-	}
-	res.conn = conn
-	subCtx, cancel := context.WithCancel(ctx)
-	res.cancel = cancel
-	go res.readLoop(subCtx)
 	return res, nil
+}
+
+func (a *AxTcpClient) SetTimeout(timeout time.Duration) {
+	a.timeout = timeout
+}
+
+func (a *AxTcpClient) SetHandler(handler DataReceiveFunc) {
+	if handler == nil {
+		a.handlerFunc = func(data []byte, ctx context.Context) error { return nil }
+	} else {
+		a.handlerFunc = handler
+	}
 }
 
 func (a *AxTcpClient) Disconnect() error {
@@ -58,13 +63,16 @@ func (a *AxTcpClient) Connect() error {
 	if a.conn != nil {
 		return nil // already connected
 	}
+	if a.handlerFunc == nil {
+		return errors.New("handler func is nil")
+	}
 
 	conn, err := net.Dial("tcp", a.address)
 	if err != nil {
 		return err
 	}
 	a.conn = conn
-	subCtx, cancel := context.WithCancel(a.ctx)
+	subCtx, cancel := context.WithCancel(context.WithValue(a.ctx, "remote_address", conn.RemoteAddr()))
 	a.cancel = cancel
 	go a.readLoop(subCtx)
 	return nil
@@ -115,38 +123,11 @@ func (a *AxTcpClient) readLoop(ctx context.Context) {
 				_ = a.Disconnect()
 				break
 			}
-			startTime := time.Now()
-			outData, err := a.handlerFunc(inData, ctx)
+			err = a.handlerFunc(inData, a.ctx)
 			if err != nil {
 				a.logger.Error().Err(err).Msg("handle request failed")
 				_ = a.Disconnect()
 				return
-			}
-			outData, err = a.binProcessor.Marshal(outData)
-			if err != nil {
-				a.logger.Error().Err(err).Msg("marshal failed")
-				_ = a.Disconnect()
-				return
-			}
-			if outData != nil {
-				if err = a.conn.SetWriteDeadline(time.Now().Add(a.timeout)); err != nil {
-					a.logger.Error().Err(err).Msg("failed to set write deadline")
-					_ = a.Disconnect()
-					return
-				}
-				if err = a.Send(outData); err != nil {
-					a.logger.Error().Err(err).Msg("failed to write response")
-					_ = a.Disconnect()
-					return
-				}
-			}
-			endTime := time.Now()
-			deltaTime := endTime.Sub(startTime)
-			if a.logger.GetLevel() <= zerolog.DebugLevel && deltaTime > time.Millisecond*250 {
-				a.logger.Debug().
-					Str("address", a.address).
-					Str("duration", endTime.Sub(startTime).String()).
-					Msg("TCP response sent")
 			}
 		}
 	}

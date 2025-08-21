@@ -163,8 +163,12 @@ func (a *AxTcpClient) IsConnected() bool {
 }
 
 func (a *AxTcpClient) Send(in []byte) error {
+
 	inBts, err := a.binProcessor.Marshal(in)
 	if err != nil {
+		return err
+	}
+	if err = a.conn.SetWriteDeadline(time.Now().Add(a.timeout)); err != nil {
 		return err
 	}
 	_, err = a.conn.Write(addSize32(inBts))

@@ -1,4 +1,4 @@
-module github.com/axgrid/axtransport
+module github.com/axgrid/axtransportg
 
 go 1.21
 

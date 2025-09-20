@@ -232,7 +232,7 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 
 		err = conn.SetReadDeadline(time.Now().Add(a.timeout))
 		if err != nil {
-			log.Error().Err(err).Msg("failed to set body read deadline")
+			log.Error().Err(err).Msg("fail to set body read deadline")
 			opsTcpErrorCount.Inc()
 			break
 		}

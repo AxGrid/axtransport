@@ -204,28 +204,24 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 	defer opsConnectionsCount.Dec()
 	defer conn.Close()
 	axConn := NewAxTcpConnection(a.ctx, a.logger, conn, a.writeBufSize)
-	timeout := time.Duration(a.timeout) * time.Millisecond
 	defer axConn.Close()
 	for {
-		err := conn.SetReadDeadline(time.Now().Add(timeout))
+		err := conn.SetReadDeadline(time.Now().Add(a.timeout))
 		if err != nil {
 			log.Error().Err(err).Msg("set read deadline failed")
 			opsTcpErrorCount.Inc()
-			axConn.Write([]byte(err.Error()))
 			return
 		}
 		sizeBytes, err := readNBytes(conn, 4)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to read header bytes")
 			opsTcpErrorCount.Inc()
-			axConn.Write([]byte(err.Error()))
 			break
 		}
 		bodyLength := getUInt32FromBytes(sizeBytes)
 		if bodyLength == 0 {
 			log.Error().Msg("failed to convert header to len")
 			opsTcpErrorCount.Inc()
-			axConn.Write([]byte("receive empty body"))
 			break
 		}
 		if bodyLength > MaxBodySize {
@@ -234,25 +230,22 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 			break
 		}
 
-		err = conn.SetReadDeadline(time.Now().Add(timeout))
+		err = conn.SetReadDeadline(time.Now().Add(a.timeout))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to set body read deadline")
 			opsTcpErrorCount.Inc()
-			axConn.Write([]byte(err.Error()))
 			break
 		}
 		dataBytes, err := readNBytes(conn, int(bodyLength))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to read body bytes")
 			opsTcpErrorCount.Inc()
-			axConn.Write([]byte(err.Error()))
 			break
 		}
 		data, err := a.binProcessor.Unmarshal(dataBytes)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal failed")
 			opsTcpErrorCount.Inc()
-			axConn.Write([]byte(err.Error()))
 			break
 		}
 		go func(rData []byte) {
@@ -261,14 +254,12 @@ func (a *AxTcp) handleConn(conn net.Conn) {
 			opsRequestDuration.WithLabelValues("tcp").Observe(time.Since(startTime).Seconds())
 			if err != nil {
 				log.Error().Err(err).Msg("handle request failed")
-				axConn.Write([]byte(err.Error()))
 				axConn.Close()
 				return
 			}
 			rData, err = a.binProcessor.Marshal(rData)
 			if err != nil {
 				log.Error().Err(err).Msg("marshal failed")
-				axConn.Write([]byte(err.Error()))
 				axConn.Close()
 				return
 			}

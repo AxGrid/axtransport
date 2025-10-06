@@ -5,12 +5,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/rs/zerolog"
 	"io"
 	"net"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/rs/zerolog"
 )
 
 var MaxBodySize = uint32(1024 * 1024)
@@ -99,20 +100,26 @@ func (a *AxTcpConnection) Close() {
 
 var (
 	ErrTooMuchData = errors.New("too many data in out chan")
+	ErrConnClosed  = errors.New("connection is closed")
 )
 
 func (a *AxTcpConnection) Write(data []byte) error {
-	if len(a.outChan) > a.outSize/2 {
-		a.logger.Error().Err(a.ctx.Err()).Msg("too much data in out chan")
-		return ErrTooMuchData
-	}
-	if a.ctx.Err() != nil {
-		a.logger.Error().Err(a.ctx.Err()).Msg("can't write to connection out chan")
-		opsTcpErrorCount.Inc()
+	select {
+	case <-a.ctx.Done():
 		return a.ctx.Err()
+	default:
+		if len(a.outChan) > a.outSize/2 {
+			a.logger.Error().Err(a.ctx.Err()).Msg("too much data in out chan")
+			return ErrTooMuchData
+		}
+		if a.ctx.Err() != nil {
+			a.logger.Error().Err(a.ctx.Err()).Msg("can't write to connection out chan")
+			opsTcpErrorCount.Inc()
+			return a.ctx.Err()
+		}
+		a.outChan <- data
+		return nil
 	}
-	a.outChan <- data
-	return nil
 }
 
 func (a *AxTcpConnection) Read(b []byte) (n int, err error) {
